@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: dufs
+
+dufs:
+  path: ${user.home}/dufs
+  backupUrl: http://localhost:8081/upload
