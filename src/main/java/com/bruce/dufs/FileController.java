@@ -1,6 +1,5 @@
 package com.bruce.dufs;
 
-import com.alibaba.fastjson.JSON;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -16,12 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.InputStream;
-import java.io.OutputStream;
 
 import static com.bruce.dufs.FileUtils.getMimeType;
 import static com.bruce.dufs.FileUtils.getUUIDFile;
@@ -49,10 +46,16 @@ public class FileController {
         // 1.处理文件
         boolean needSync = false;
         String filename = request.getHeader(HttpSyncer.XFILENAME);
+        String originalFilename = file.getOriginalFilename();
         // 同步到backup
         if(filename == null || filename.isEmpty()){
             needSync = true;
-            filename = getUUIDFile(file.getOriginalFilename());
+            filename = getUUIDFile(originalFilename);
+        } else {
+            String orn = request.getHeader(HttpSyncer.XORIGFILENAME);
+            if(orn != null && !orn.isEmpty()){
+                originalFilename = orn;
+            }
         }
         String subDir = FileUtils.getSubDir(filename);
         File dest = new File(uploadPath + "/"  + subDir +"/" + filename);
@@ -61,7 +64,7 @@ public class FileController {
         // 2.处理meta信息
         FileMeta meta = new FileMeta();
         meta.setName(filename);
-        meta.setOriginalFilename(file.getOriginalFilename());
+        meta.setOriginalFilename(originalFilename);
         meta.setSize(file.getSize());
         if(autoMd5){
             meta.getTags().put("md5", DigestUtils.md5DigestAsHex(new FileInputStream(dest)));
@@ -77,7 +80,7 @@ public class FileController {
 
         // 3.同步文件到backup
         if(needSync){
-            httpSyncer.sync(dest,backupUrl);
+            httpSyncer.sync(dest,backupUrl, originalFilename);
         }
 
         return filename;

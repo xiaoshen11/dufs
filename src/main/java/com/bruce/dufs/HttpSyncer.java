@@ -19,11 +19,13 @@ import java.io.File;
 public class HttpSyncer {
 
     public final static String XFILENAME = "X-Filename";
-    public String sync(File file, String url){
+    public final static String XORIGFILENAME = "X-Orig-Filename";
+    public String sync(File file, String url, String originalFilename){
         RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
         headers.add(XFILENAME, file.getName());
+        headers.add(XORIGFILENAME, originalFilename);
 
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file",new FileSystemResource(file));
