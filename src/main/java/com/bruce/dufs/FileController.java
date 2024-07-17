@@ -1,11 +1,14 @@
 package com.bruce.dufs;
 
+import com.alibaba.fastjson.JSON;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.DigestUtils;
+import org.springframework.util.FileCopyUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,9 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 import static com.bruce.dufs.FileUtils.getMimeType;
 import static com.bruce.dufs.FileUtils.getUUIDFile;
@@ -30,6 +36,8 @@ public class FileController {
     private String uploadPath;
     @Value("${dufs.backupUrl}")
     private String backupUrl;
+    @Value("${dufs.autoMd5}")
+    private boolean autoMd5;
 
     @Autowired
     HttpSyncer httpSyncer;
@@ -37,8 +45,11 @@ public class FileController {
     @SneakyThrows
     @PostMapping("/upload")
     public String upload(@RequestParam("file")MultipartFile file, HttpServletRequest request){
+
+        // 1.处理文件
         boolean needSync = false;
         String filename = request.getHeader(HttpSyncer.XFILENAME);
+        // 同步到backup
         if(filename == null || filename.isEmpty()){
             needSync = true;
             filename = getUUIDFile(file.getOriginalFilename());
@@ -47,7 +58,24 @@ public class FileController {
         File dest = new File(uploadPath + "/"  + subDir +"/" + filename);
         file.transferTo(dest);
 
-        // 同步文件到backup
+        // 2.处理meta信息
+        FileMeta meta = new FileMeta();
+        meta.setName(filename);
+        meta.setOriginalFilename(file.getOriginalFilename());
+        meta.setSize(file.getSize());
+        if(autoMd5){
+            meta.getTags().put("md5", DigestUtils.md5DigestAsHex(new FileInputStream(dest)));
+        }
+
+        // 2.1存放到本地文件
+        String metaName = filename+".meta";
+        File metaFile = new File(uploadPath + "/"  + subDir +"/" + metaName);
+        FileUtils.writeMeta(metaFile, meta);
+
+        // 2.2存放到数据库
+        // 2.3存放到配置中心或注册中心
+
+        // 3.同步文件到backup
         if(needSync){
             httpSyncer.sync(dest,backupUrl);
         }
@@ -85,4 +113,15 @@ public class FileController {
         }
     }
 
+    @RequestMapping("/meta")
+    public String meta(@RequestParam("name") String name){
+        String subDir = FileUtils.getSubDir(name);
+        String path = uploadPath + "/"  + subDir +"/" + name + ".meta";
+        File file = new File(path);
+        try {
+            return FileCopyUtils.copyToString(new FileReader(file));
+        }catch (Exception e){
+            throw new RuntimeException(e);
+        }
+    }
 }
