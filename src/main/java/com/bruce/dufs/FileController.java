@@ -17,6 +17,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 
+import static com.bruce.dufs.FileUtils.getMimeType;
+import static com.bruce.dufs.FileUtils.getUUIDFile;
+
 /**
  * @date 2024/7/10
  */
@@ -34,17 +37,14 @@ public class FileController {
     @SneakyThrows
     @PostMapping("/upload")
     public String upload(@RequestParam("file")MultipartFile file, HttpServletRequest request){
-        File dir = new File(uploadPath);
-        if(!dir.exists()){
-            dir.mkdir();
-        }
         boolean needSync = false;
         String filename = request.getHeader(HttpSyncer.XFILENAME);
         if(filename == null || filename.isEmpty()){
             needSync = true;
-            filename = file.getOriginalFilename();
+            filename = getUUIDFile(file.getOriginalFilename());
         }
-        File dest = new File(uploadPath + "/" + filename);
+        String subDir = FileUtils.getSubDir(filename);
+        File dest = new File(uploadPath + "/"  + subDir +"/" + filename);
         file.transferTo(dest);
 
         // 同步文件到backup
@@ -55,9 +55,12 @@ public class FileController {
         return filename;
     }
 
+
+
     @RequestMapping("/download")
     public void download(@RequestParam("name") String name, HttpServletResponse response){
-        String path = uploadPath + "/" + name;
+        String subDir = FileUtils.getSubDir(name);
+        String path = uploadPath + "/" + subDir + "/" + name;
         File file = new File(path);
         try {
             FileInputStream fis = new FileInputStream(file);
@@ -66,8 +69,8 @@ public class FileController {
 
             // 加一些response的头
             response.setCharacterEncoding("UTF-8");
-            response.setContentType("application/octet-stream");
-            response.setHeader("Content-Disposition","attachment;filename=" + name);
+            response.setContentType(getMimeType(name));
+//            response.setHeader("Content-Disposition","attachment;filename=" + name);
             response.setHeader("Content-Length", String.valueOf(file.length()));
 
             // 读取文件信息，并逐段输出
